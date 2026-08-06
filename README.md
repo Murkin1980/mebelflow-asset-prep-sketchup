@@ -1,0 +1,1 @@
+# mebelflow-asset-prep-sketchup
