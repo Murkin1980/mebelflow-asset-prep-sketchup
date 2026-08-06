@@ -7,11 +7,14 @@ require_relative 'domain/issue'
 require_relative 'domain/asset_manifest'
 require_relative 'domain/readiness_report'
 require_relative 'domain/prepared_copy_result'
+require_relative 'domain/asset_package'
 require_relative 'analysis/tree_scanner'
 require_relative 'analysis/asset_manifest_builder'
 require_relative 'analysis/readiness_rules'
+require_relative 'analysis/glb_validation_rules'
 require_relative 'preparation/prepared_copy_plan'
 require_relative 'preparation/prepared_copy_service'
+require_relative 'packaging/asset_package_service'
 require_relative 'persistence/attribute_store'
 require_relative 'highlighting/review_tool'
 require_relative 'ui/dialog'
@@ -23,7 +26,7 @@ module MebelFlow
 
     class << self
       attr_reader :dialog, :readiness_dialog, :review_tool, :analysis,
-                  :last_report, :last_prepared_copy
+                  :last_report, :last_prepared_copy, :last_asset_package
 
       def open
         root = require_selected_root
@@ -87,6 +90,7 @@ module MebelFlow
           readiness_report: @last_report,
           output_directory: output_directory
         ).execute
+        @last_asset_package = nil
 
         ::UI.messagebox(
           "Prepared Copy создана.\n\n" \
@@ -95,6 +99,36 @@ module MebelFlow
           "Report: #{@last_prepared_copy.report_path}\n\n" \
           'Подготовленная копия выделена для ручного экспорта GLB.'
         )
+      rescue StandardError => e
+        handle_error(e)
+      end
+
+      def build_asset_package
+        unless @last_prepared_copy
+          ::UI.messagebox('Сначала создайте Prepared Copy.')
+          return
+        end
+
+        glb_path = select_glb_file
+        return unless glb_path
+
+        @last_asset_package = Packaging::AssetPackageService.new(
+          prepared_copy: @last_prepared_copy,
+          glb_path: glb_path
+        ).execute
+
+        package_path = File.join(@last_asset_package.package_directory, 'package.json')
+        if @last_asset_package.valid?
+          ::UI.messagebox(
+            "Asset Package готов.\n\n" \
+            "Папка: #{@last_asset_package.package_directory}\n" \
+            "GLB: #{@last_asset_package.glb_path}\n" \
+            "Package: #{package_path}"
+          )
+        else
+          codes = @last_asset_package.issues.map(&:code).join(', ')
+          ::UI.messagebox("Asset Package не прошёл локальную проверку.\nОшибки: #{codes}\nPackage: #{package_path}")
+        end
       rescue StandardError => e
         handle_error(e)
       end
@@ -127,6 +161,15 @@ module MebelFlow
         else
           placeholder = ::UI.savepanel('Выберите папку для Prepared Copy', nil, 'prepared-copy-output')
           placeholder && File.dirname(placeholder)
+        end
+      end
+
+      def select_glb_file
+        if ::UI.respond_to?(:openpanel)
+          ::UI.openpanel('Выберите вручную экспортированный GLB', nil, 'GLB Files|*.glb||')
+        else
+          ::UI.messagebox('В этой версии SketchUp невозможно открыть диалог выбора GLB.')
+          nil
         end
       end
 
@@ -174,10 +217,18 @@ module MebelFlow
       end
       menu.add_item(prepared_copy_command)
 
+      package_command = ::UI::Command.new('Собрать Asset Package') { AssetPrep.build_asset_package }
+      package_command.tooltip = 'Добавить вручную экспортированный GLB и создать package.json'
+      package_command.set_validation_proc do
+        AssetPrep.last_prepared_copy ? MF_ENABLED : MF_GRAYED
+      end
+      menu.add_item(package_command)
+
       toolbar = ::UI::Toolbar.new('MebelFlow Asset Prep')
       toolbar.add_item(prepare_command)
       toolbar.add_item(readiness_command)
       toolbar.add_item(prepared_copy_command)
+      toolbar.add_item(package_command)
       toolbar.restore
       file_loaded(__FILE__)
     end
