@@ -25,6 +25,43 @@ Commands:
 
 The JSON command becomes available after a readiness check.
 
+### Slice 3 — Prepared Copy
+
+The Prepared Copy workflow creates a safe, deeply detached duplicate of the selected root module after a successful readiness check.
+
+Pipeline:
+
+```text
+Исходная SketchUp-модель
+        ↓
+Readiness Report: ready / ready_with_warnings
+        ↓
+Prepared Copy
+  ├── удалены DELETE_FROM_PREPARED_COPY
+  ├── сохранены IGNORE-объекты, но исключены из manifest
+  ├── очищены и зафиксированы MebelFlow metadata
+  └── создан manifest.json + report.json
+        ↓
+Ручной экспорт GLB из подготовленной копии
+```
+
+Command:
+
+- `Extensions → MebelFlow → Создать Prepared Copy`
+
+The command is enabled only when the last report has status `ready` or `ready_with_warnings` and belongs to the currently selected root object.
+
+Prepared Copy behavior:
+
+- the original selected module is not modified;
+- copied component definitions are made unique recursively before destructive changes;
+- entities with role `DELETE_FROM_PREPARED_COPY` are erased only from the prepared copy;
+- entities with role `IGNORE` remain visible in the prepared copy but are omitted from `manifest.json`;
+- MebelFlow metadata are normalized to schema version `1.0`;
+- the prepared root stores the original root ID and readiness status;
+- the prepared copy is selected and zoomed for manual GLB export;
+- output is written to `<asset-id>-prepared/manifest.json` and `<asset-id>-prepared/report.json`.
+
 ## Readiness statuses
 
 - `ready` — no blocking errors or warnings.
@@ -101,27 +138,32 @@ Both the report and nested asset manifest use schema version `1.0`.
 }
 ```
 
-## Manual model-check scenario
+## Manual model-check and preparation scenario
 
 1. Open a SketchUp model and select exactly one root group/component.
 2. Run `Extensions → MebelFlow → Подготовить ассет`.
 3. Assign `MAIN_BODY` to the selected root module.
 4. Assign roles to every exportable nested group/component.
-5. Mark non-exported objects as `IGNORE` or `DELETE_FROM_PREPARED_COPY`.
-6. Run `Extensions → MebelFlow → Проверить готовность ассета`.
-7. Click an issue or entity ID in the report to focus and highlight it in the 3D scene.
-8. Correct the model and run the check again.
-9. When satisfied, run `Extensions → MebelFlow → Сохранить отчёт JSON`.
+5. Mark context objects that should remain visible but stay out of the manifest as `IGNORE`.
+6. Mark objects that must be removed from the prepared copy as `DELETE_FROM_PREPARED_COPY`.
+7. Run `Extensions → MebelFlow → Проверить готовность ассета`.
+8. Click an issue or entity ID in the report to focus and highlight it in the 3D scene.
+9. Correct the model and run the check again.
+10. With status `ready` or `ready_with_warnings`, select the same root and run `Создать Prepared Copy`.
+11. Choose an output directory for `manifest.json` and `report.json`.
+12. Verify that the newly selected `[PREPARED]` module contains the intended geometry.
+13. Manually export only that prepared copy to GLB using SketchUp.
 
 ## Tests
 
-Readiness business rules run without SketchUp using simple Ruby doubles:
+Business rules run without SketchUp using simple Ruby doubles and pure policy objects:
 
 ```bash
 ruby test/readiness_rules_test.rb
+ruby test/prepared_copy_plan_test.rb
 ```
 
-Current Slice 2 test coverage includes all mandatory rules, non-blocking polygon warnings and schema version `1.0` serialization.
+Test coverage includes readiness rules, schema version `1.0`, polygon warnings, and the Prepared Copy role policy for included, ignored and deleted entities.
 
 ## Development installation
 
@@ -137,11 +179,11 @@ into the SketchUp `Plugins` folder and restart SketchUp.
 - HTTP/API integration.
 - Cloud upload.
 - Authentication.
-- GLB export.
+- Automatic GLB export.
 - Price calculation.
 - Changes to `mebelflow-ai`.
 - Automatic polygon reduction.
 
 ## Runtime note
 
-Ruby rules and syntax can be tested outside SketchUp. Viewport, menu and `HtmlDialog` behavior still require a manual test in SketchUp Desktop.
+Ruby rules and syntax can be tested outside SketchUp. Viewport, menu, deep-copy behavior and `HtmlDialog` interactions still require a manual test in SketchUp Desktop.
