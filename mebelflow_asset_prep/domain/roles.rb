@@ -5,12 +5,13 @@ module MebelFlow
     module Domain
       module Roles
         ALL = %w[
-          UNDEFINED BODY FACADE DRAWER HANDLE APPLIANCE GLASS DECOR
+          UNDEFINED MAIN_BODY BODY FACADE DRAWER HANDLE APPLIANCE GLASS DECOR
           INNER_SHADOW IGNORE DELETE_FROM_PREPARED_COPY
         ].freeze
 
         COLORS = {
           'UNDEFINED' => Sketchup::Color.new(255, 176, 0),
+          'MAIN_BODY' => Sketchup::Color.new(34, 197, 94),
           'BODY' => Sketchup::Color.new(66, 184, 131),
           'FACADE' => Sketchup::Color.new(66, 184, 131),
           'DRAWER' => Sketchup::Color.new(66, 184, 131),
