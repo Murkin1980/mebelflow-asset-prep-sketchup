@@ -3,33 +3,67 @@
 require 'sketchup.rb'
 require 'json'
 require_relative 'domain/roles'
+require_relative 'domain/issue'
+require_relative 'domain/asset_manifest'
+require_relative 'domain/readiness_report'
 require_relative 'analysis/tree_scanner'
+require_relative 'analysis/asset_manifest_builder'
+require_relative 'analysis/readiness_rules'
 require_relative 'persistence/attribute_store'
 require_relative 'highlighting/review_tool'
 require_relative 'ui/dialog'
+require_relative 'ui/readiness_dialog'
 
 module MebelFlow
   module AssetPrep
     PLUGIN_ID = 'mebelflow_asset_prep'
 
     class << self
-      attr_reader :dialog, :review_tool, :analysis
+      attr_reader :dialog, :readiness_dialog, :review_tool, :analysis, :last_report
 
       def open
-        root = selected_root
-        unless root
-          UI.messagebox('Выберите одну группу или компонент мебельного модуля.')
-          return
-        end
+        root = require_selected_root
+        return unless root
 
-        @analysis = Analysis::TreeScanner.new(root).scan
+        scan, manifest = scan_and_manifest(root)
+        @analysis = review_analysis(scan, manifest)
         @review_tool = Highlighting::ReviewTool.new(@analysis)
         @dialog ||= UI::Dialog.new
         @dialog.show(@analysis, @review_tool)
         Sketchup.active_model.select_tool(@review_tool)
       rescue StandardError => e
-        UI.messagebox("MebelFlow Asset Prep: #{e.message}")
-        warn e.full_message
+        handle_error(e)
+      end
+
+      def check_readiness
+        root = require_selected_root
+        return unless root
+
+        scan, manifest = scan_and_manifest(root)
+        @analysis = review_analysis(scan, manifest)
+        @review_tool = Highlighting::ReviewTool.new(@analysis)
+        @last_report = Analysis::ReadinessRules.evaluate(manifest)
+        @readiness_dialog ||= UI::ReadinessDialog.new
+        @readiness_dialog.show(@last_report, @review_tool)
+        Sketchup.active_model.select_tool(@review_tool)
+      rescue StandardError => e
+        handle_error(e)
+      end
+
+      def save_readiness_report
+        unless @last_report
+          ::UI.messagebox('Сначала выполните команду «Проверить готовность ассета».')
+          return
+        end
+
+        default_name = "#{@last_report.manifest.asset_id}-readiness-report.json"
+        path = ::UI.savepanel('Сохранить Asset Readiness Report', nil, default_name)
+        return unless path
+
+        File.open(path, 'w:utf-8') { |file| file.write(JSON.pretty_generate(@last_report.to_h)) }
+        ::UI.messagebox("Отчёт сохранён:\n#{path}")
+      rescue StandardError => e
+        handle_error(e)
       end
 
       def selected_root
@@ -41,14 +75,55 @@ module MebelFlow
 
         nil
       end
+
+      private
+
+      def require_selected_root
+        root = selected_root
+        ::UI.messagebox('Выберите одну группу или компонент мебельного модуля.') unless root
+        root
+      end
+
+      def scan_and_manifest(root)
+        scan = Analysis::TreeScanner.new(root).scan
+        manifest = Analysis::AssetManifestBuilder.new(root: root, scan: scan).build
+        [scan, manifest]
+      end
+
+      def review_analysis(scan, manifest)
+        items = manifest.items.map do |item|
+          {
+            id: item[:id], parent_id: item[:parent_id], name: item[:name], type: item[:type],
+            role: item[:role], dimensions_mm: item[:dimensions_mm]
+          }
+        end
+        scan.merge(items: items)
+      end
+
+      def handle_error(error)
+        ::UI.messagebox("MebelFlow Asset Prep: #{error.message}")
+        warn error.full_message
+      end
     end
 
     unless file_loaded?(__FILE__)
-      command = UI::Command.new('MebelFlow Asset Prep') { AssetPrep.open }
-      command.tooltip = 'Подготовить мебельный модуль для MebelFlow AI'
-      UI.menu('Extensions').add_item(command)
-      toolbar = UI::Toolbar.new('MebelFlow Asset Prep')
-      toolbar.add_item(command)
+      menu = ::UI.menu('Extensions').add_submenu('MebelFlow')
+
+      prepare_command = ::UI::Command.new('Подготовить ассет') { AssetPrep.open }
+      prepare_command.tooltip = 'Разобрать и назначить роли элементам мебельного модуля'
+      menu.add_item(prepare_command)
+
+      readiness_command = ::UI::Command.new('Проверить готовность ассета') { AssetPrep.check_readiness }
+      readiness_command.tooltip = 'Создать Asset Readiness Report'
+      menu.add_item(readiness_command)
+
+      save_command = ::UI::Command.new('Сохранить отчёт JSON') { AssetPrep.save_readiness_report }
+      save_command.set_validation_proc { AssetPrep.last_report ? MF_ENABLED : MF_GRAYED }
+      menu.add_item(save_command)
+
+      toolbar = ::UI::Toolbar.new('MebelFlow Asset Prep')
+      toolbar.add_item(prepare_command)
+      toolbar.add_item(readiness_command)
       toolbar.restore
       file_loaded(__FILE__)
     end
