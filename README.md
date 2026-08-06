@@ -29,8 +29,6 @@ The JSON command becomes available after a readiness check.
 
 The Prepared Copy workflow creates a safe, deeply detached duplicate of the selected root module after a successful readiness check.
 
-Pipeline:
-
 ```text
 Исходная SketchUp-модель
         ↓
@@ -49,18 +47,83 @@ Command:
 
 - `Extensions → MebelFlow → Создать Prepared Copy`
 
-The command is enabled only when the last report has status `ready` or `ready_with_warnings` and belongs to the currently selected root object.
-
 Prepared Copy behavior:
 
 - the original selected module is not modified;
 - copied component definitions are made unique recursively before destructive changes;
-- entities with role `DELETE_FROM_PREPARED_COPY` are erased only from the prepared copy;
-- entities with role `IGNORE` remain visible in the prepared copy but are omitted from `manifest.json`;
-- MebelFlow metadata are normalized to schema version `1.0`;
-- the prepared root stores the original root ID and readiness status;
-- the prepared copy is selected and zoomed for manual GLB export;
-- output is written to `<asset-id>-prepared/manifest.json` and `<asset-id>-prepared/report.json`.
+- `DELETE_FROM_PREPARED_COPY` objects are erased only from the copy;
+- `IGNORE` objects remain in the copy but are omitted from `manifest.json`;
+- metadata are normalized to schema version `1.0`;
+- output is written to `<asset-id>-prepared/manifest.json` and `report.json`.
+
+### Slice 4 — Asset Package & GLB Validation
+
+Slice 4 works only with local files. It does not export GLB automatically and does not inspect GLB geometry. After manually exporting the prepared SketchUp object, select the resulting `.glb` file and run:
+
+- `Extensions → MebelFlow → Собрать Asset Package`
+
+The command becomes available after a Prepared Copy has been created.
+
+The plugin performs simple local validation:
+
+1. `manifest.json` exists;
+2. `report.json` exists;
+3. the selected file has the `.glb` extension;
+4. the GLB exists on disk;
+5. the GLB file size is greater than zero.
+
+A valid package is stored in the existing prepared directory:
+
+```text
+<asset-id>-prepared/
+├── manifest.json
+├── report.json
+├── <asset-id>.glb
+└── package.json
+```
+
+The selected GLB is copied into the package under the canonical name `<asset-id>.glb`. `package.json` uses schema version `1.0` and records local file names, relative paths, existence, sizes and validation issues.
+
+Example:
+
+```json
+{
+  "schema_version": "1.0",
+  "package_type": "mebelflow_asset",
+  "status": "valid",
+  "valid": true,
+  "asset_id": "tall-oven-600",
+  "files": {
+    "manifest": {
+      "name": "manifest.json",
+      "relative_path": "manifest.json",
+      "exists": true,
+      "size_bytes": 2410
+    },
+    "report": {
+      "name": "report.json",
+      "relative_path": "report.json",
+      "exists": true,
+      "size_bytes": 3200
+    },
+    "glb": {
+      "name": "tall-oven-600.glb",
+      "relative_path": "tall-oven-600.glb",
+      "exists": true,
+      "size_bytes": 286440
+    }
+  },
+  "issues": []
+}
+```
+
+Possible blocking issue codes:
+
+- `manifest_missing`;
+- `report_missing`;
+- `invalid_glb_extension`;
+- `glb_missing`;
+- `glb_empty`.
 
 ## Readiness statuses
 
@@ -72,7 +135,7 @@ Prepared Copy behavior:
 
 Blocking:
 
-1. At least one root object has role `MAIN_BODY` (`main_body` in the report semantics).
+1. At least one root object has role `MAIN_BODY`.
 2. No exportable entity has role `UNDEFINED`.
 3. No empty group/component exists.
 4. Root and exportable entities have measurable positive bounding dimensions.
@@ -84,86 +147,30 @@ Non-blocking:
 
 Objects with roles `IGNORE` and `DELETE_FROM_PREPARED_COPY` are not considered exportable.
 
-## Stable JSON schema
+## Manual end-to-end scenario
 
-Both the report and nested asset manifest use schema version `1.0`.
-
-```json
-{
-  "schema_version": "1.0",
-  "report_type": "asset_readiness",
-  "status": "ready_with_warnings",
-  "ready": true,
-  "checked_at": "2026-08-06T04:20:00Z",
-  "summary": {
-    "errors": 0,
-    "warnings": 1,
-    "infos": 0
-  },
-  "issues": [
-    {
-      "code": "high_polygon_count",
-      "severity": "warning",
-      "message": "Количество полигонов превышает рекомендуемый порог, но не блокирует готовность.",
-      "entity_ids": [],
-      "details": {
-        "triangle_count": 62000,
-        "threshold": 50000
-      }
-    }
-  ],
-  "asset_manifest": {
-    "schema_version": "1.0",
-    "asset_id": "tall-oven-600",
-    "root": {
-      "id": 101,
-      "name": "Tall Oven 600",
-      "dimensions_mm": {
-        "width": 600.0,
-        "depth": 580.0,
-        "height": 2200.0
-      }
-    },
-    "units": {
-      "source": "millimeters",
-      "normalized": "millimeters",
-      "scale_to_mm": 1.0,
-      "valid": true
-    },
-    "geometry": {
-      "triangle_count": 62000
-    },
-    "items": []
-  }
-}
-```
-
-## Manual model-check and preparation scenario
-
-1. Open a SketchUp model and select exactly one root group/component.
-2. Run `Extensions → MebelFlow → Подготовить ассет`.
-3. Assign `MAIN_BODY` to the selected root module.
-4. Assign roles to every exportable nested group/component.
-5. Mark context objects that should remain visible but stay out of the manifest as `IGNORE`.
-6. Mark objects that must be removed from the prepared copy as `DELETE_FROM_PREPARED_COPY`.
-7. Run `Extensions → MebelFlow → Проверить готовность ассета`.
-8. Click an issue or entity ID in the report to focus and highlight it in the 3D scene.
-9. Correct the model and run the check again.
-10. With status `ready` or `ready_with_warnings`, select the same root and run `Создать Prepared Copy`.
-11. Choose an output directory for `manifest.json` and `report.json`.
-12. Verify that the newly selected `[PREPARED]` module contains the intended geometry.
-13. Manually export only that prepared copy to GLB using SketchUp.
+1. Select one root group/component in SketchUp.
+2. Run `Подготовить ассет` and assign semantic roles.
+3. Run `Проверить готовность ассета`.
+4. Correct blocking issues until status is `ready` or `ready_with_warnings`.
+5. Run `Создать Prepared Copy` and choose a local output folder.
+6. Verify the selected `[PREPARED]` copy.
+7. Manually export only that copy as `.glb` from SketchUp.
+8. Run `Собрать Asset Package`.
+9. Select the manually exported GLB.
+10. Verify that the prepared folder contains `manifest.json`, `report.json`, canonical GLB and `package.json`.
+11. Confirm `package.json` status is `valid`.
 
 ## Tests
 
-Business rules run without SketchUp using simple Ruby doubles and pure policy objects:
+Business rules and local package validation run without SketchUp:
 
 ```bash
 ruby test/readiness_rules_test.rb
 ruby test/prepared_copy_plan_test.rb
+ruby test/glb_validation_rules_test.rb
+ruby test/asset_package_service_test.rb
 ```
-
-Test coverage includes readiness rules, schema version `1.0`, polygon warnings, and the Prepared Copy role policy for included, ignored and deleted entities.
 
 ## Development installation
 
@@ -174,16 +181,17 @@ Copy:
 
 into the SketchUp `Plugins` folder and restart SketchUp.
 
-## Not implemented
+## Explicitly not implemented
 
-- HTTP/API integration.
-- Cloud upload.
-- Authentication.
-- Automatic GLB export.
-- Price calculation.
-- Changes to `mebelflow-ai`.
-- Automatic polygon reduction.
+- HTTP/API integration;
+- cloud upload;
+- authentication;
+- automatic GLB export;
+- GLB geometry, material or binary-structure inspection;
+- price calculation;
+- changes to `mebelflow-ai`;
+- automatic polygon reduction.
 
 ## Runtime note
 
-Ruby rules and syntax can be tested outside SketchUp. Viewport, menu, deep-copy behavior and `HtmlDialog` interactions still require a manual test in SketchUp Desktop.
+Pure Ruby rules can be tested outside SketchUp. Menu commands, file dialogs, Prepared Copy behavior and final package assembly still require a manual test in SketchUp Desktop.
