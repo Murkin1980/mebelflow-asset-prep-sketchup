@@ -1,0 +1,18 @@
+:root { font-family: Arial, sans-serif; color: #1e293b; background: #f8fafc; }
+body { margin: 0; padding: 18px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+h1 { font-size: 18px; margin: 0; }
+.status { padding: 7px 10px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+.ready { background: #dcfce7; color: #166534; }
+.ready_with_warnings { background: #fef3c7; color: #92400e; }
+.not_ready { background: #fee2e2; color: #991b1b; }
+.summary { margin: 16px 0; padding: 12px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; }
+.issue { margin-bottom: 10px; padding: 12px; background: white; border: 1px solid #e2e8f0; border-left-width: 5px; border-radius: 8px; }
+.issue.error { border-left-color: #dc2626; }
+.issue.warning { border-left-color: #d97706; }
+.issue.info { border-left-color: #2563eb; }
+.issue h2 { margin: 0 0 6px; font-size: 14px; }
+.issue p { margin: 0 0 8px; font-size: 13px; line-height: 1.4; }
+.entities { display: flex; flex-wrap: wrap; gap: 6px; }
+button { border: 1px solid #cbd5e1; background: #fff; border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+.empty { padding: 20px; background: white; border-radius: 8px; text-align: center; }
