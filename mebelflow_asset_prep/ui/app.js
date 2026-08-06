@@ -1,6 +1,6 @@
 (() => {
   const state = { analysis: null, activeId: null };
-  const roles = ['UNDEFINED','BODY','FACADE','DRAWER','HANDLE','APPLIANCE','GLASS','DECOR','INNER_SHADOW','IGNORE','DELETE_FROM_PREPARED_COPY'];
+  const roles = ['UNDEFINED','MAIN_BODY','BODY','FACADE','DRAWER','HANDLE','APPLIANCE','GLASS','DECOR','INNER_SHADOW','IGNORE','DELETE_FROM_PREPARED_COPY'];
   const call = (name, ...args) => window.sketchup?.[name](...args);
 
   function render() {
