@@ -14,6 +14,7 @@ module MebelFlow
           @readiness_report = readiness_report
           @output_directory = output_directory
           @model = model
+          @operation_open = false
         end
 
         def execute
@@ -23,6 +24,7 @@ module MebelFlow
 
           FileUtils.mkdir_p(@output_directory)
           @model.start_operation('MebelFlow Prepared Copy', true)
+          @operation_open = true
 
           prepared_root = duplicate_root
           deep_make_unique(prepared_root)
@@ -35,6 +37,7 @@ module MebelFlow
           paths = write_files(manifest)
 
           @model.commit_operation
+          @operation_open = false
           select_prepared_root(prepared_root)
 
           Domain::PreparedCopyResult.new(
@@ -48,7 +51,8 @@ module MebelFlow
             manifest: manifest
           )
         rescue StandardError
-          @model.abort_operation if operation_active?
+          @model.abort_operation if @operation_open
+          @operation_open = false
           raise
         end
 
@@ -153,12 +157,6 @@ module MebelFlow
           name = entity.name.to_s.strip
           name = entity.definition.name.to_s.strip if name.empty? && entity.respond_to?(:definition)
           name.empty? ? "#{entity.typename} ##{entity.persistent_id}" : name
-        end
-
-        def operation_active?
-          @model.respond_to?(:active_operation_name) ? !@model.active_operation_name.nil? : true
-        rescue StandardError
-          true
         end
       end
     end
